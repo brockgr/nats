@@ -159,7 +159,17 @@ module NATSD #:nodoc: all
       end
 
       def auth_ok?(user, pass)
-        @options[:users].each { |u| return true if (user == u[:user] && pass == u[:pass]) }
+        if @options[:auth_plugin]
+          @options[:auth_plugin].authenticate(self, user, pass) { |success| yield(success) }
+        else
+          @options[:users].each do |u|
+            if (user == u[:user] && pass == u[:pass])
+              yield(true)
+              return
+            end
+          end
+          yield(false)
+        end
         false
       end
 

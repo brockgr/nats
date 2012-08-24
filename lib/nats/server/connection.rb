@@ -198,13 +198,16 @@ module NATSD #:nodoc: all
 
       return queue_data(OK) unless Server.auth_required?
 
-      EM.cancel_timer(@auth_pending)
-      if Server.auth_ok?(config['user'], config['pass'])
-        queue_data(OK) if @verbose
-        @auth_pending = nil
-      else
-        error_close AUTH_FAILED
-        debug "Authorization failed for connection", cid
+      # auth_ok now uses a callback incase the authentication service is very slow
+      Server.auth_ok?(config['user'], config['pass']) do |success|
+        EM.cancel_timer(@auth_pending)
+        if success
+          queue_data(OK) if @verbose
+          @auth_pending = nil
+        else
+          error_close AUTH_FAILED
+          debug "Authorization failed for connection", cid
+        end
       end
     end
 

@@ -62,14 +62,39 @@ module NATSD
         @options[:port] = config['port'] if @options[:port].nil?
         @options[:addr] = config['net'] if @options[:addr].nil?
 
+        # Load plugins early since they can ad faunctionality further down
+        if plugins = config['plugins']
+          plugins = [plugins] unless plugins.is_a? Array
+          plugins.each do |f|
+            if f.is_a? String
+              f = File.dirname(config_file)+"/"+f if f !~ /^\//
+              log "Loading plugin [#{f}]"
+              require f
+            else
+              log_error "Skipping bad plugin file name [#{f.inspect}]"
+            end
+          end
+        end
+
+
         if auth = config['authorization']
-          @options[:user] = auth['user'] if @options[:user].nil?
-          @options[:pass] = auth['password'] if @options[:pass].nil?
-          @options[:pass] = auth['pass'] if @options[:pass].nil?
-          @options[:token] = auth['token'] if @options[:token].nil?
-          @options[:auth_timeout] = auth['timeout'] if @options[:auth_timeout].nil?
-          # Multiple Users setup
-          @options[:users] = symbolize_users(auth['users']) || []
+          if auth['class']
+            # Pluggable auth
+            begin
+              klass = Kernel.const_get(auth['class'])
+              @options[:auth_plugin] = klass.new
+            rescue NameError => e
+              raise "Could not find authorization class [#{auth['class']}] - did you load the plugin?"
+            end
+          else
+            @options[:user] = auth['user'] if @options[:user].nil?
+            @options[:pass] = auth['password'] if @options[:pass].nil?
+            @options[:pass] = auth['pass'] if @options[:pass].nil?
+            @options[:token] = auth['token'] if @options[:token].nil?
+            @options[:auth_timeout] = auth['timeout'] if @options[:auth_timeout].nil?
+            # Multiple Users setup
+            @options[:users] = symbolize_users(auth['users']) || []
+          end
         end
 
         # TLS/SSL
@@ -120,7 +145,7 @@ module NATSD
 
       def open_syslog
         return unless @options[:syslog]
-        Syslog.open("#{@options[:syslog]}", Syslog::LOG_PID,  Syslog::LOG_USER ) unless Syslog.opened? 
+        Syslog.open("#{@options[:syslog]}", Syslog::LOG_PID,  Syslog::LOG_USER ) unless Syslog.opened?
       end
 
       def close_syslog
@@ -171,7 +196,7 @@ module NATSD
           @options[:user], @options[:pass] = first[:user], first[:pass]
         end
 
-        @auth_required = (not @options[:user].nil?)
+        @auth_required = (not @options[:user].nil?) || (not @options[:auth_plugin].nil?)
 
         @ssl_required = (not @options[:ssl].nil?)
 
