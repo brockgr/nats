@@ -1,0 +1,8 @@
+
+---
+
+# Relative to this file
+plugins: plugins/ldap.rb
+
+authorization:
+  class: NatsAuthLdap
